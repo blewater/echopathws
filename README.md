@@ -4,7 +4,7 @@ A simple localhost golang standard web server at the requested port or with a fa
 
 ## Launch: ##
 
-`λ go run ws.go 8770`
+`λ go run echopathws.go 8770`
 
 Starting localhost:8770...
 
