@@ -1,5 +1,4 @@
-// Package ws launches a web server
-// for an echo path web server
+// Launches an echo path web server
 // at the requested port
 // or at the default 8770 port.
 package main
@@ -29,6 +28,7 @@ func main() {
 		}
 		port = argport
 	}
+
 	workflow(port)
 }
 
@@ -45,6 +45,7 @@ func setHTTPHandler(port int) {
 
 	fmt.Printf("Starting localhost:%d...\n", port)
 
+	http.HandleFunc("/favicon.ico", favIconHandlerNil)
 	http.HandleFunc("/", handler) // each request calls handler
 
 	fmt.Printf("Set HTTP handler @ localhost:%d...\n", port)
@@ -60,6 +61,10 @@ func launchHTTPListener(port int) {
 
 }
 
+// favIconHandlerNil absorbs up the browser favicon requests
+func favIconHandlerNil(w http.ResponseWriter, r *http.Request) {
+}
+
 // handler echoes the Path component of the request URL r.
 func handler(w http.ResponseWriter, r *http.Request) {
 
@@ -70,6 +75,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		respString = fmt.Sprintf("Root Domain Request: /\n")
 	}
+
 	// -> client
 	fmt.Fprint(w, respString)
+
+	// -> stdout
+	log.Println(respString)
 }
