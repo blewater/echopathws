@@ -4,81 +4,133 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"time"
 )
+
+const shutdownSecondsAllowance = 15
+const defaultHTTPPort = 8770
 
 // Accepts a web listening port to launch the web server.
 func main() {
 
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+
 	var port int
 
 	if len(os.Args) == 1 {
-		port = 8770
+
+		// Default
+		port = defaultHTTPPort
 
 	} else {
 
 		argport, err := strconv.Atoi(os.Args[1])
 		if err != nil {
-			log.Fatalf("Not acceptable web listening port %v", os.Args[1])
+			logger.Fatalf("Not acceptable http listening port %v", os.Args[1])
 		}
 		port = argport
 	}
 
-	workflow(port)
+	workflow(logger, port)
+
+	logger.Printf("Http Server at %d completed its shutdown.\n", port)
 }
 
-// Performs 2 steps for the web server.
-func workflow(port int) {
+// Performs steps for launching the web server.
+func workflow(logger *log.Logger, port int) {
 
-	setHTTPHandler(port)
+	httpServer := getHTTPServer(logger, port)
 
-	launchHTTPListener(port)
+	setupTerminateSignal(logger, httpServer, port)
 
-}
-
-func setHTTPHandler(port int) {
-
-	fmt.Printf("Starting localhost:%d...\n", port)
-
-	http.HandleFunc("/favicon.ico", favIconHandlerNil)
-	http.HandleFunc("/", handler) // each request calls handler
-
-	fmt.Printf("Set HTTP handler @ localhost:%d...\n", port)
+	launchHTTPListener(logger, httpServer, port)
 
 }
 
-func launchHTTPListener(port int) {
+// getHTTPServer constructs an HTTP listening server with 2 request handlers
+func getHTTPServer(logger *log.Logger, port int) *http.Server {
 
-	err := http.ListenAndServe(fmt.Sprint(":", port), nil)
+	router := http.NewServeMux()
+
+	// mute favicon requests
+	router.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+
+	})
+
+	// handler echoes the Path component of the request URL r.
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		urlPath := r.URL.Path
+		var respString string
+
+		if len(urlPath) > 1 {
+			respString = fmt.Sprintf("%q\n", html.EscapeString(urlPath[1:len(urlPath)]))
+		} else {
+			respString = fmt.Sprintf("Root Domain Request: /\n")
+		}
+
+		// -> client
+		fmt.Fprint(w, respString)
+
+		// -> stdout
+		logger.Println(respString)
+	}) // each request calls handler
+
+	return &http.Server{
+		Addr:     fmt.Sprintf(":%d", port),
+		Handler:  router,
+		ErrorLog: logger,
+	}
+}
+
+// setupTerminateSignal connects the os.Interrupt signal to a quit channel to
+// start teardown.
+func setupTerminateSignal(logger *log.Logger, httpServer *http.Server, port int) {
+
+	quit := make(chan os.Signal, 1)
+
+	signal.Notify(quit, os.Interrupt)
+
+	go httpServerShutdown(logger, httpServer, port, quit)
+
+}
+
+// Final step in launching an http server: Start accepting requests.
+func launchHTTPListener(logger *log.Logger, httpServer *http.Server, port int) {
+
+	logger.Printf("Launching http server at %d...\n", port)
+
+	err := httpServer.ListenAndServe()
+
+	if err != nil && err != http.ErrServerClosed {
+		logger.Fatalf("Can't launch http listener at %d...\n", port)
+	}
+
+}
+
+// httpServerShutdown handles the termination signal by shutting down the http server
+// by closing connections and forcing shutdown if needed: "shutdownSecondsAllowance" max allowance.
+func httpServerShutdown(logger *log.Logger, httpServer *http.Server, port int, quit <-chan os.Signal) {
+
+	<-quit
+	logger.Printf("Http server at %d is shutting down...\n", port)
+
+	// Allow
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownSecondsAllowance*time.Second)
+	defer cancel()
+
+	httpServer.SetKeepAlivesEnabled(false)
+
+	err := httpServer.Shutdown(ctx)
 	if err != nil {
-		log.Fatalf("Can't launch http listener at %d...\n", port)
+		logger.Fatalf("Could not shutdown the server @ %d. Error: %v\n", port, err)
 	}
-
-}
-
-// favIconHandlerNil absorbs up the browser favicon requests
-func favIconHandlerNil(w http.ResponseWriter, r *http.Request) {
-}
-
-// handler echoes the Path component of the request URL r.
-func handler(w http.ResponseWriter, r *http.Request) {
-
-	urlPath := r.URL.Path
-	var respString string
-	if len(urlPath) > 1 {
-		respString = fmt.Sprintf("%q\n", html.EscapeString(urlPath[1:len(urlPath)]))
-	} else {
-		respString = fmt.Sprintf("Root Domain Request: /\n")
-	}
-
-	// -> client
-	fmt.Fprint(w, respString)
-
-	// -> stdout
-	log.Println(respString)
 }
