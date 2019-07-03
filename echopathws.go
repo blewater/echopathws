@@ -41,7 +41,7 @@ func main() {
 
 	workflow(logger, port)
 
-	logger.Printf("Http Server at %d completed its shutdown.\n", port)
+	logger.Printf("Http Server at container port %d completed its shutdown.\n", port)
 }
 
 // Performs steps for launching the web server.
@@ -106,12 +106,12 @@ func setupTerminateSignal(logger *log.Logger, httpServer *http.Server, port int)
 // Final step in launching an http server: Start accepting requests.
 func launchHTTPListener(logger *log.Logger, httpServer *http.Server, port int) {
 
-	logger.Printf("Launching http server at %d...\n", port)
+	logger.Printf("Http server at container port %d listening...\n", port)
 
 	err := httpServer.ListenAndServe()
 
 	if err != nil && err != http.ErrServerClosed {
-		logger.Fatalf("Can't launch http listener at %d...\n", port)
+		logger.Fatalf("Can't launch http listener at container %d...\n", port)
 	}
 
 }
@@ -121,7 +121,7 @@ func launchHTTPListener(logger *log.Logger, httpServer *http.Server, port int) {
 func httpServerShutdown(logger *log.Logger, httpServer *http.Server, port int, quit <-chan os.Signal) {
 
 	<-quit
-	logger.Printf("Http server at %d is shutting down...\n", port)
+	logger.Printf("Http server at container port %d is shutting down...\n", port)
 
 	// Allow
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownSecondsAllowance*time.Second)
